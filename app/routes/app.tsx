@@ -19,7 +19,7 @@ export default function App() {
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Channels</s-link>
-        <s-link href="/app/additional">Sync activity</s-link>
+        <s-link href="/app/sync">Sync activity</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>
