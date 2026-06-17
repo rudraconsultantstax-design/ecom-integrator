@@ -56,3 +56,33 @@ export async function provisionOrg(shopDomain: string): Promise<OrgId> {
 
   return data.id as OrgId;
 }
+
+/**
+ * Looks up the tenant org id for a shop domain WITHOUT creating one.
+ *
+ * Unlike `provisionOrg`, this never inserts a row — it is meant for contexts
+ * (e.g. mandatory GDPR compliance webhooks) where the shop may already have
+ * uninstalled and we must not resurrect a tenant. Returns `null` when no org
+ * exists for the domain.
+ *
+ * Server-only: imports the service-role client.
+ */
+export async function findOrgIdByShopDomain(
+  shopDomain: string,
+): Promise<OrgId | null> {
+  if (!shopDomain) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("orgs")
+    .select("id")
+    .eq("shop_domain", shopDomain)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.id as OrgId;
+}

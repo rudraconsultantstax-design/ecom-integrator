@@ -9,6 +9,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { provisionOrg } from "../lib/provisionOrg.server";
 import { orgScoped } from "../lib/orgScopedClient.server";
+import { logSyncEvent } from "../lib/syncLog.server";
 
 /**
  * Channels (home) page for ecom-integrator.
@@ -19,10 +20,16 @@ import { orgScoped } from "../lib/orgScopedClient.server";
  * existing org id created at install time), then queried through the
  * `orgScoped` helper so the service-role client stays tenant-isolated.
  *
- * The "Connect marketplace" form posts to this route's `action`, which inserts
- * an org-scoped `channels` row (status `connected`) for the chosen platform.
- * The insert is idempotent per platform+org: a channel that already exists is
- * left untouched rather than duplicated.
+ * The "Connect marketplace" form posts to this route's `action` with
+ * `intent=connect`, which inserts an org-scoped `channels` row (status
+ * `connected`) for the chosen platform. The insert is idempotent per
+ * platform+org: a channel that already exists is left untouched rather than
+ * duplicated.
+ *
+ * Each connected channel also has a "Sync now" button that posts
+ * `intent=sync` with the channel id; the action records a manual sync run in
+ * the shared `sync_logs` audit table (source `manual`, event `sync`, status
+ * `ok`, scoped to the org and channel) and surfaces the result in a banner.
  */
 
 // Columns of the Supabase `public.channels` table (multi-tenant by org_id).
@@ -94,8 +101,68 @@ export const action = async ({
   const orgId = await provisionOrg(session.shop);
 
   const formData = await request.formData();
-  const platform = String(formData.get("platform") ?? "");
+  const intent = String(formData.get("intent") ?? "connect");
 
+  if (intent === "sync") {
+    return syncChannel(orgId, String(formData.get("channelId") ?? ""));
+  }
+
+  return connectChannel(orgId, String(formData.get("platform") ?? ""));
+};
+
+/**
+ * Records a manual sync run for one channel in `sync_logs` (source `manual`,
+ * event `sync`, status `ok`), scoped to the org and channel. This is the
+ * user-triggered counterpart to the scheduled connectors that will later write
+ * the same audit table.
+ */
+async function syncChannel(
+  orgId: string,
+  channelId: string,
+): Promise<ActionResult> {
+  if (!channelId) {
+    return { ok: false, message: "Select a channel to sync." };
+  }
+
+  // Confirm the channel belongs to this tenant before logging against it.
+  const { data: channel, error: lookupError } = await orgScoped(orgId)
+    .select("channels", "id, name")
+    .eq("id", channelId)
+    .maybeSingle();
+
+  if (lookupError) {
+    return {
+      ok: false,
+      message: `Could not start sync: ${lookupError.message}`,
+    };
+  }
+
+  if (!channel) {
+    return { ok: false, message: "That channel was not found." };
+  }
+
+  const channelName = (channel as { name?: string }).name ?? "channel";
+
+  await logSyncEvent({
+    orgId,
+    channelId,
+    source: "manual",
+    eventType: "sync",
+    status: "ok",
+    message: `Manual sync triggered for ${channelName}`,
+  });
+
+  return { ok: true, message: `Sync started for ${channelName}.` };
+}
+
+/**
+ * Connects a marketplace by inserting an org-scoped `channels` row (idempotent
+ * per platform+org).
+ */
+async function connectChannel(
+  orgId: string,
+  platform: string,
+): Promise<ActionResult> {
   if (!isConnectablePlatform(platform)) {
     return { ok: false, message: "Select a marketplace to connect." };
   }
@@ -137,7 +204,7 @@ export const action = async ({
   }
 
   return { ok: true, message: `Connected ${label}.` };
-};
+}
 
 function formatStatus(status: string): string {
   if (!status) return "Unknown";
@@ -160,9 +227,17 @@ export default function ChannelsDashboard() {
   const { channels } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const isSubmitting =
+  const isPosting =
     navigation.state === "submitting" &&
     navigation.formMethod?.toLowerCase() === "post";
+  const submittedIntent = navigation.formData?.get("intent");
+  // Connect form is busy only while a connect (not a sync) post is in flight.
+  const isConnecting = isPosting && submittedIntent !== "sync";
+  // Track which channel, if any, is currently being synced for per-row spinners.
+  const syncingChannelId =
+    isPosting && submittedIntent === "sync"
+      ? String(navigation.formData?.get("channelId") ?? "")
+      : null;
 
   return (
     <s-page heading="Channels">
@@ -174,6 +249,7 @@ export default function ChannelsDashboard() {
           />
         ) : null}
         <Form method="post">
+          <input type="hidden" name="intent" value="connect" />
           <s-stack direction="block" gap="base">
             <s-select
               name="platform"
@@ -187,7 +263,7 @@ export default function ChannelsDashboard() {
                 </s-option>
               ))}
             </s-select>
-            <s-button type="submit" variant="primary" loading={isSubmitting}>
+            <s-button type="submit" variant="primary" loading={isConnecting}>
               Connect marketplace
             </s-button>
           </s-stack>
@@ -213,6 +289,7 @@ export default function ChannelsDashboard() {
               <s-table-header>Platform</s-table-header>
               <s-table-header>Status</s-table-header>
               <s-table-header>Connected</s-table-header>
+              <s-table-header>Actions</s-table-header>
             </s-table-header-row>
             <s-table-body>
               {channels.map((channel) => (
@@ -223,6 +300,19 @@ export default function ChannelsDashboard() {
                     <s-badge>{formatStatus(channel.status)}</s-badge>
                   </s-table-cell>
                   <s-table-cell>{formatDate(channel.created_at)}</s-table-cell>
+                  <s-table-cell>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="sync" />
+                      <input type="hidden" name="channelId" value={channel.id} />
+                      <s-button
+                        type="submit"
+                        variant="secondary"
+                        loading={syncingChannelId === channel.id}
+                      >
+                        Sync now
+                      </s-button>
+                    </Form>
+                  </s-table-cell>
                 </s-table-row>
               ))}
             </s-table-body>

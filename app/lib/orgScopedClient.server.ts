@@ -35,6 +35,7 @@ export type OrgScopedTable =
   | "returns"
   | "channels"
   | "channel_listings"
+  | "stock_levels"
   | "sync_logs";
 
 export type OrgId = string;

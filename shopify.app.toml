@@ -24,6 +24,22 @@ api_version = "2026-04"
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
+  # Mandatory GDPR compliance webhooks (required for public App Store apps).
+  # Handled by: /app/routes/webhooks.app.customers_data_request.tsx
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/customers_data_request"
+  compliance_topics = [ "customers/data_request" ]
+
+  # Handled by: /app/routes/webhooks.app.customers_redact.tsx
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/customers_redact"
+  compliance_topics = [ "customers/redact" ]
+
+  # Handled by: /app/routes/webhooks.app.shop_redact.tsx
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/shop_redact"
+  compliance_topics = [ "shop/redact" ]
+
 [app_preferences]
 url = "https://ecom.baisajaipur.in/preferences"
 
