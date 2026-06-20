@@ -1,0 +1,55 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+# Placeholder client_id. Run `shopify app config link` (and pick "ecom integrator")
+# to write the real Client ID for this app into this file — do NOT hand-edit it.
+client_id = "REPLACE_WITH_ECOM_INTEGRATOR_CLIENT_ID"
+application_url = "https://ecom.baisajaipur.in"
+embedded = true
+name = "ecom-integrator"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# Scopes for a multi-marketplace connector / order-sync / analytics app.
+scopes = "read_orders,write_orders,read_products,read_inventory,write_inventory,read_fulfillments,read_assigned_fulfillment_orders,read_merchant_managed_fulfillment_orders,read_returns,read_analytics"
+use_legacy_install_flow = false
+
+[webhooks]
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  # Mandatory GDPR compliance webhooks (required for public App Store apps).
+  # Handled by: /app/routes/webhooks.app.customers_data_request.tsx
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/customers_data_request"
+  compliance_topics = [ "customers/data_request" ]
+
+  # Handled by: /app/routes/webhooks.app.customers_redact.tsx
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/customers_redact"
+  compliance_topics = [ "customers/redact" ]
+
+  # Handled by: /app/routes/webhooks.app.shop_redact.tsx
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/shop_redact"
+  compliance_topics = [ "shop/redact" ]
+
+[app_preferences]
+url = "https://ecom.baisajaipur.in/preferences"
+
+[auth]
+redirect_urls = [
+  "https://ecom.baisajaipur.in/auth/callback",
+  "https://ecom.baisajaipur.in/auth/shopify/callback",
+  "https://ecom.baisajaipur.in/api/auth/callback"
+]
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true
