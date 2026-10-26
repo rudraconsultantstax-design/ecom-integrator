@@ -72,6 +72,9 @@
     "p-map": "^4.0.0",
     "@vercel/static-config": {
       "ajv": "^8.18.0"
+    },
+    "@prisma/config": {
+      "deepmerge-ts": "^8.0.0"
     }
   },
   "author": "ashishsharmatcc"
